@@ -1,4 +1,4 @@
 from setuptools import setup, find_packages
 
-packagename="nesting"
+packagename=""
 setup(name=packagename, packages=find_packages())
