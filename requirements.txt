@@ -7,3 +7,4 @@ numpy==1.18.1
 setuptools==45.2.0.post20200210
 scikit_learn==0.22.2.post1
 basemap=1.2.0
+pytest=5.3.5
