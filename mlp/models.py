@@ -10,7 +10,7 @@ import torch.nn.functional as F
 from torch.jit.annotations import Optional
 from torch import Tensor
 
-__all__ = ['mlp', 'mlp_bn', 'wrn-40-2']
+__all__ = ['mlp', 'mlp_bn']
 
 MLPOutputs = namedtuple('MLPOutputs', ['logits', 'h1', 'h2', 'h3', 'h4'])
 MLPOutputs.__annotations__ = {'logits': torch.Tensor, 'h1': Optional[torch.Tensor], 'h2': Optional[torch.Tensor], 'h3': Optional[torch.Tensor], 'h4': Optional[torch.Tensor]}
@@ -31,15 +31,9 @@ def load_model(model_name, classes=10, intermediate=False, **kwargs):
     net = mlp(classes, input_dim=3072, width=4096, bottleneck_dim=1024, batchnorm=False, **kwargs)
   elif model_name == 'mlp_bn':
     net = mlp(classes, input_dim=3072, width=4096, bottleneck_dim=1024, batchnorm=True, **kwargs)
-  elif model_name == 'wrn-40-2' or model_name == 'wideresnet':
-    net = wideresnet(classes=10, depth=40, widen_factor=2, dropout=0.2)
   else:
     raise ValueError("Unsupported model architecture.")
   return net
-
-def wide_resnet40_2(**kwargs):
-  kwargs['width_per_group'] = 64*2
-  return _resnet('wide_resnet40_2', BottleNeck, []) # FIXME find config
 
 def mlp(num_classes, input_dim, width, bottleneck_dim, batchnorm, **kwargs):
   """MLP architecture with access to intermediate representations
