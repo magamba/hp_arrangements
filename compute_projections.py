@@ -40,7 +40,7 @@ def kernel_all_positive_proj(conv_w, normalize=False):
   proj = np.squeeze(proj).tolist()
   return proj
   
-def distance_from_init(net, net_init, proj_dict=None):
+def distance_from_init(net, net_init, proj_dict=None, with_linear=False):
   """Compute distance from initialization for each layer of net.
      Store measures to proj_dict if specified, or return new dictionary otherwise.
   """
@@ -48,7 +48,7 @@ def distance_from_init(net, net_init, proj_dict=None):
     proj_dict = {}
   
   block_id, stage_id = 0, 0
-  for layer, layer_init in zip(net.features, net_init.features):
+  for layer, layer_init in zip(net.modules(), net_init.modules()):
     if isinstance(layer, nn.Conv2d):
       if layer.kernel_size == (1,1):
         continue
@@ -66,6 +66,18 @@ def distance_from_init(net, net_init, proj_dict=None):
     elif isinstance(layer, nn.MaxPool2d):
       stage_id += 1
       block_id = 0
+    elif isinstance(layer, nn.Linear) and with_linear:
+      try:
+        proj_dict[str(stage_id)]
+      except KeyError:
+        proj_dict[str(stage_id)] = {}
+        
+      param = list(layer.parameters())[0]
+      param_init = list(layer_init.parameters())[0]
+      l2_dist, inf_dist = distance_from_init_layer(param.detach(), param_init.detach())
+      proj_dict[str(stage_id)][str(block_id)]["l2_dist"] = l2_dist
+      proj_dict[str(stage_id)][str(block_id)]["l_inf_dist"] = inf_dist
+      block_id += 1
   
   return proj_dict 
   
@@ -109,7 +121,7 @@ def num_conv_layers(net):
       conv_layer_count += 1 
   return conv_layer_count  
 
-def positive_orthant(net, normalize=False):
+def positive_orthant(net, normalize=False, with_linear=False):
   """For each layer in a convolutional network, compute the 
      all positive projection of (1, 1, ..., 1) w.r.t the hyperplanes
      induced by each convolutional kernel.
@@ -137,7 +149,7 @@ def positive_orthant(net, normalize=False):
   
   stage_id = 0
   block_id = 0
-  for layer in net.features:
+  for layer in net.modules():
     if isinstance(layer, nn.Conv2d):
       if layer.kernel_size == (1,1):
         continue
@@ -156,6 +168,19 @@ def positive_orthant(net, normalize=False):
     elif isinstance(layer, nn.MaxPool2d):
       stage_id += 1
       block_id = 0
+      
+    elif isinstance(layer, nn.Linear) and with_linear:
+      try:
+        proj_dict[str(stage_id)]
+      except KeyError:
+        proj_dict[str(stage_id)] = {}
+        
+      param = list(layer.parameters())[0]
+      kernel_proj = kernel_all_positive_proj(param.detach(), normalize)
+      mean, mass = probability_mass(kernel_proj, k=0)
+      proj_dict[str(stage_id)][str(block_id)] = { "projections" : kernel_proj, "mass" : mass, "mean" : mean }
+      proj_net += kernel_proj
+      block_id += 1
   
   mean_net, mass_net = probability_mass(proj_net, k=0)
   proj_dict["net"] = { "projections" : proj_net, "mass" : mass_net, "mean" : mean_net }
@@ -186,8 +211,11 @@ def compute_perc(net):
 def write_metadata(results, filename, args):
   """Write network metadata to results dictionary
   """
+  dataset = args.dataset
+  if args.subsample_classes > 0:
+    dataset = dataset + '_' + str(args.subsample_classes)
   results["arch"] = args.arch
-  results["dataset"] = args.dataset
+  results["dataset"] = dataset
   if args.seed is not None:
     results["seed"] = str(args.seed)
   splits = filename.split('_')
@@ -209,12 +237,14 @@ def get_arg_parser():
 
   # architecture
   parser.add_argument("--arch", type=str, default=None, help="Network architecture to be trained. Run without this option to see a list of all available pretrained archs.")
+  # subsample classes
+  parser.add_argument("--subsample-classes", type=int, default=0, help="Number of classes in the prediction head of the network. Specify 0 (default) for using the standard number of classes of DATASET.")
   # dataset
   parser.add_argument("--dataset", type=str, default=None, help="Dataset used to train the model. Used to specify the number of classes of the prediction layer of the model.")
   # load trained model from file
   parser.add_argument("--load-from", type=str, default='', help="Load trained network from file.")
   # measure distance from initialization
-  parser.add_argument("--init-from", type=str, default='', help="(Optional) network initialization. Specify a model snapshot to measure distance from initialization for each layer.")
+  parser.add_argument("--init-from", type=str, default='', help="Network initialization. Specify a model snapshot to measure distance from initialization for each layer.")
   # load pretrained models from model zoo
   parser.add_argument("--pretrained", action='store_true', default=False, help="Load pretrained architecture on ImageNet [default=False].")
   # cuda support
@@ -222,6 +252,8 @@ def get_arg_parser():
   
   # normalize projections
   parser.add_argument("--normalize", action='store_true', default=False, help="Normalize projections.")
+  # include fully connected layers
+  parser.add_argument("--with-linear", action='store_true', default=False, help="Compute statistics also for fully connected layers.")
   # results path
   parser.add_argument("--results", type=str, default='./results', help="Path to store results [default = './results'].")
   # log file
@@ -236,10 +268,13 @@ def get_arg_parser():
 def prepare_dirs(args):
   """Prepare directories to store results
   """
-  results_path = os.path.join(args.results, args.dataset)
+  dataset = args.dataset
+  if args.subsample_classes > 0:
+    dataset = dataset + '_' + str(args.subsample_classes)
+  results_path = os.path.join(args.results, dataset)
   results_path = os.path.join(results_path, args.arch)
   
-  logs_path = os.path.join('./log', args.dataset)
+  logs_path = os.path.join('./log', dataset)
   logs_path = os.path.join(logs_path, args.arch)
   
   if args.seed is not None:
@@ -306,6 +341,8 @@ def main(args):
     device = torch.device("cpu")
   
   classes, in_channels = data_loader.num_classes(args.dataset)
+  if args.subsample_classes > 0:
+    classes = args.subsample_classes
   if os.path.exists(args.load_from):
     logger.info("Loading {} from {}.".format(args.arch, args.load_from))
     net = snapshot.load_model(args.arch, classes, args.load_from, device, in_channels=in_channels)
@@ -334,10 +371,10 @@ def main(args):
   
   # compute statistics per network
   logger.info("Computing projections statistics...")
-  results = positive_orthant(net, args.normalize)
+  results = positive_orthant(net, args.normalize, args.with_linear)
   if net_init is not None:
     logger.info("Computing distance from initialization...")
-    results = distance_from_init(net, net_init, results)
+    results = distance_from_init(net, net_init, results, args.with_linear)
   logger.info("done")
   
   if os.path.exists(args.load_from):

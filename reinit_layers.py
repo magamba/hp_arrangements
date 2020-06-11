@@ -17,7 +17,52 @@ import models
 import snapshot
 import utils
 import scores
-from plot import plot_heatmaps
+
+def plot_heatmaps(results, filename, plots_path=None):
+  """Plot heatmap of loss in accuracy
+  """
+  try:
+    import matplotlib.pyplot as plt
+  except ImportError:
+    print("Package matplotlib required to plot heatmaps. Aborting.")
+    sys.exit(1)
+  
+  try:
+    import seaborn as sns
+  except ImportError:
+    print("Package seaborn required to plot heatmaps. Aborting.")
+    sys.exit(1)
+  
+  # set matplotlib fontsize
+  plt.rcParams.update({'font.size' : 20}) # was 24
+  plt.rcParams.update({'axes.titlesize' : 22}) # was 26
+  plt.rcParams.update({'axes.labelsize' : 20}) # was 24
+  plt.rcParams.update({'lines.linewidth' : 4})
+  plt.rcParams.update({'lines.markersize' : 20})
+  plt.rcParams.update({'xtick.labelsize' : 20}) # was 24
+  plt.rcParams.update({'ytick.labelsize' : 20}) # was 24
+  
+  best_top1_acc = results["top1_test"]
+  nepochs = len(results["init_from_epoch"])
+  nlayers = len(results["init_from_epoch"][next(iter(results["init_from_epoch"]))])
+  
+  xlabels = range(1, nlayers+1)
+  ylabels = list(results["init_from_epoch"].keys())
+  
+  acc_loss = np.zeros((nepochs, nlayers), dtype=np.float)
+  best_acc = np.ones(nlayers, dtype=np.float) * float(best_top1_acc)
+  
+  for epoch_id, epoch in enumerate(results["init_from_epoch"]):
+    accuracies = np.array(results["init_from_epoch"][epoch])
+    acc_loss[epoch_id] = (best_acc - accuracies) / best_top1_acc
+  
+  ax = sns.heatmap(acc_loss, xticklabels=xlabels, yticklabels=ylabels, linewidth=0.5)
+  
+  if plots_path is not None:
+    filename = os.path.join(plots_path, filename + '.pdf')
+    plt.savefig(filename, bbox_inches="tight", dpi=300)
+  else:
+    plt.show()
 
 def reinit_weights(results, net, net_init, test_loader, criterion, epoch, device):
   """For each convolutional layer in net, reinitialize its weights
