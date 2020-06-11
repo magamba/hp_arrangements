@@ -31,7 +31,7 @@ To train a MLP to reproduce the results reported in the supplemental material, r
                     --weight-decay 5e-4 \
                     --snapshot-every 10 \
                     --snapshot-all-until 10 \
-                    --train-acc &
+                    --train-acc
   ```
 
 Training supports logging to ```tensorboard```.
