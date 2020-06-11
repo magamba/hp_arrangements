@@ -61,3 +61,10 @@ def print_train_loss_epoch(epoch, epoch_loss, top1_acc=None, top5_acc=None, logg
   if top5_acc is not None:
     msg += ', top_5 acc: {:.3f}'.format(top5_acc)
   logger.info(msg)
+  
+def print_regularization_loss_epoch(epoch, regularization_loss, logger_name='train'):
+  """Print the regularization loss for the specified epoch
+  """
+  logger = logging.getLogger(logger_name)
+  logger.info('\t epoch: {}, regularization loss: {:.6f}'.format(epoch, regularization_loss))
+

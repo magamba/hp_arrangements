@@ -16,26 +16,26 @@ from torch.utils.data.sampler import SubsetRandomSampler
 
 __all__ = ['cifar10', 'cifar100', 'imagenet', 'mnist']
 
-def load_dataset(dataset_name, dataset_path, batch_size, shuffle=True, augmentation=True, noise=0., split=0., num_workers=4, pin_memory=True, split_seed=None, noise_seed=None, stratified=False, nclasses=0, class_sample_seed=42, no_normalization=False):
+def load_dataset(dataset_name, dataset_path, batch_size, shuffle=True, augmentation=True, noise=0., split=0., num_workers=4, pin_memory=True, split_seed=None, noise_seed=None, stratified=False, nclasses=0, class_sample_seed=42, no_normalization=False, upscale=False, upscale_padding=False):
   """Load the specified dataset
   """
   if dataset_name == 'imagenet':
     if noise != 0.:
-      raise NotImplementedError("Noisy labels / pixels on imagenet are currently not supported.")
+      raise NotImplementedError("Noisy labels / pixels on ImageNet are currently not supported.")
     train_loader, test_loader, val_loader = load_imagenet(dataset_path, batch_size, shuffle=shuffle, augmentation=augmentation,
                                             split=split, num_workers=num_workers, pin_memory=pin_memory,
-                                            split_seed=split_seed, stratified=stratified, nclasses=nclasses, sample_seed=class_sample_seed,
-                                            no_normalization=no_normalization)
+                                            split_seed=split_seed, stratified=stratified, nclasses=nclasses, 
+                                            sample_seed=class_sample_seed, no_normalization=no_normalization)
   elif dataset_name == 'cifar10':
     train_loader, test_loader, val_loader = load_cifar10(dataset_path, batch_size, shuffle=shuffle, augmentation=augmentation,
                                             noise=noise, split=split, num_workers=num_workers, pin_memory=pin_memory,
                                             split_seed=split_seed, noise_seed=noise_seed, stratified=stratified,
-                                            no_normalization=no_normalization)
+                                            no_normalization=no_normalization, upscale=upscale, upscale_padding=upscale_padding)
   elif dataset_name == 'cifar100':
     train_loader, test_loader, val_loader = load_cifar100(dataset_path, batch_size, shuffle=shuffle, augmentation=augmentation,
                                             noise=noise, split=split, num_workers=num_workers, pin_memory=pin_memory,
                                             split_seed=split_seed, noise_seed=noise_seed, stratified=stratified,
-                                            no_normalization=no_normalization)
+                                            no_normalization=no_normalization, upscale=upscale, upscale_padding=upscale_padding)
   elif dataset_name == 'mnist':
     train_loader, test_loader, val_loader = load_mnist(dataset_path, batch_size, shuffle=shuffle, augmentation=augmentation,
                                             noise=noise, split=split, num_workers=num_workers, pin_memory=pin_memory,
@@ -68,20 +68,42 @@ def num_classes(dataset):
 ###### DATASETS ######
 ######################
 
-def load_cifar10(dataset_path, batch_size, shuffle=True, augmentation=True, noise=0., split=0., num_workers=4, pin_memory=True, split_seed=None, noise_seed=None, stratified=False, no_normalization=False):
+def load_cifar10(dataset_path, batch_size, shuffle=True, augmentation=True, noise=0., split=0., num_workers=4, pin_memory=True, split_seed=None, noise_seed=None, stratified=False, no_normalization=False, upscale=False, upscale_padding=False):
   """Load CIFAR10
   """
-  normalize = transforms.Normalize(mean = [0.4914, 0.4822, 0.4465],
-                                     std = [0.2023, 0.1994, 0.2010])
+  if upscale:
+    train_transforms = [transforms.Resize((224,224))]
+    test_transforms = [transforms.Resize((224,224)),
+                       transforms.ToTensor()]
+    crop_size = 224
+    mean = [0.4914, 0.4822, 0.4465]
+    std = [0.1953, 0.1925, 0.1942]
+  elif upscale_padding:
+    train_transforms = [transforms.Resize((112,112)),
+                        transforms.Pad(56)]
+    test_transforms = [transforms.Resize((112,112)),
+                       transforms.Pad(56),
+                       transforms.ToTensor()]
+    crop_size = 224
+    mean = [0.1229, 0.1206, 0.1117]
+    std = [0.2367, 0.2323, 0.2190]
+  else:
+    train_transforms = []
+    test_transforms = [transforms.ToTensor()]
+    crop_size = 32
+    mean = [0.4914, 0.4822, 0.4465]
+    std = [0.2023, 0.1994, 0.2010]
+  
   if augmentation:
-    train_transforms = [transforms.RandomCrop(32, padding=4),
+    train_transforms += [transforms.RandomCrop(crop_size, padding=4),
                        transforms.RandomHorizontalFlip(),
                        transforms.ToTensor()]
   else:
-    train_transforms = [transforms.ToTensor()]
+    train_transforms += [transforms.ToTensor()]
   
-  test_transforms = [transforms.ToTensor()]
-                 
+  normalize = transforms.Normalize(mean = mean,
+                                    std = std)
+  
   if not no_normalization:
     train_transforms.append(normalize)
     test_transforms.append(normalize)
@@ -124,21 +146,42 @@ def load_cifar10(dataset_path, batch_size, shuffle=True, augmentation=True, nois
                                              num_workers=num_workers, pin_memory=pin_memory)
   return train_loader, test_loader, val_loader
 
-def load_cifar100(dataset_path, batch_size, shuffle=True, augmentation=True, noise=0., split=0., num_workers=4, pin_memory=True, split_seed=None, noise_seed=None, stratified=False, no_normalization=False):
+def load_cifar100(dataset_path, batch_size, shuffle=True, augmentation=True, noise=0., split=0., num_workers=4, pin_memory=True, split_seed=None, noise_seed=None, stratified=False, no_normalization=False, upscale=False, upscale_padding=False):
   """Load CIFAR100
   """
-  normalize = transforms.Normalize(mean = [0.5071, 0.4865, 0.4409],
-                                    std = [0.2009, 0.1984, 0.2023])
+  if upscale:
+    train_transforms = [transforms.Resize((224,224))]
+    test_transforms = [transforms.Resize((224,224)),
+                       transforms.ToTensor()]
+    crop_size = 224
+    mean = [0.5071, 0.4865, 0.4409]
+    std = [0.1942, 0.1918, 0.1958]
+  elif upscale_padding:
+    train_transforms = [transforms.Resize((112,112)),
+                        transforms.Pad(56)]
+    test_transforms = [transforms.Resize((112,112)),
+                       transforms.Pad(56),
+                       transforms.ToTensor()]
+    crop_size = 224
+    mean = [0.1268, 0.1217, 0.1103]
+    std = [0.2435, 0.2343, 0.2177]
+  else:
+    train_transforms = []
+    test_transforms = [transforms.ToTensor()]
+    crop_size = 32
+    mean = [0.5071, 0.4865, 0.4409]
+    std = [0.2009, 0.1984, 0.2023]
   
   if augmentation:
-    train_transforms = [transforms.RandomCrop(32, padding=4),
+    train_transforms += [transforms.RandomCrop(crop_size, padding=4),
                        transforms.RandomHorizontalFlip(),
                        transforms.ToTensor()]
   else:
-    train_transforms = [transforms.ToTensor()]
-  
-  test_transforms = [transforms.ToTensor()]
-                 
+    train_transforms += [transforms.ToTensor()]
+
+  normalize = transforms.Normalize(mean = mean,
+                                    std = std)
+
   if not no_normalization:
     train_transforms.append(normalize)
     test_transforms.append(normalize)

@@ -7,7 +7,7 @@ import torch.nn as nn
 from torchvision.models import vgg as VGG
 from torchvision.models import alexnet as AlexNet
 
-__all__ = [ 'lenet', 'alexnet', 'vgg11', 'vgg13', 'vgg16', 'vgg19', 'vgg19_orig']
+__all__ = [ 'lenet', 'alexnet', 'vgg11', 'vgg13', 'vgg16', 'vgg19', 'vgg19_orig', 'vgg11bn', 'vgg13bn', 'vgg16bn', 'vgg19bn']
 
 def load_model(model_name, classes=1000, pretrained=True, in_channels=3):
   """Load the specified VGG architecture for ImageNet
@@ -45,6 +45,34 @@ def load_model(model_name, classes=1000, pretrained=True, in_channels=3):
       net.features[0] = input_layer
   elif model_name == 'vgg19':
     net = VGG.vgg19(pretrained=pretrained, **kwargs)
+    if in_channels != 3:
+      input_layer = nn.Conv2d(in_channels, 64, kernel_size=3, padding=1)
+      nn.init.kaiming_normal_(input_layer.weight, mode='fan_out', nonlinearity='relu')
+      input_layer.bias.data.zero_()
+      net.features[0] = input_layer
+  elif model_name == 'vgg11bn':
+    net = VGG.vgg11_bn(pretrained=pretrained, **kwargs)
+    if in_channels != 3:
+      input_layer = nn.Conv2d(in_channels, 64, kernel_size=3, padding=1)
+      nn.init.kaiming_normal_(input_layer.weight, mode='fan_out', nonlinearity='relu')
+      input_layer.bias.data.zero_()
+      net.features[0] = input_layer
+  elif model_name == 'vgg13bn':
+    net = VGG.vgg13_bn(pretrained=pretrained, **kwargs)
+    if in_channels != 3:
+      input_layer = nn.Conv2d(in_channels, 64, kernel_size=3, padding=1)
+      nn.init.kaiming_normal_(input_layer.weight, mode='fan_out', nonlinearity='relu')
+      input_layer.bias.data.zero_()
+      net.features[0] = input_layer
+  elif model_name == 'vgg16bn':
+    net = VGG.vgg16_bn(pretrained=pretrained, **kwargs)
+    if in_channels != 3:
+      input_layer = nn.Conv2d(in_channels, 64, kernel_size=3, padding=1)
+      nn.init.kaiming_normal_(input_layer.weight, mode='fan_out', nonlinearity='relu')
+      input_layer.bias.data.zero_()
+      net.features[0] = input_layer
+  elif model_name == 'vgg19bn':
+    net = VGG.vgg19_bn(pretrained=pretrained, **kwargs)
     if in_channels != 3:
       input_layer = nn.Conv2d(in_channels, 64, kernel_size=3, padding=1)
       nn.init.kaiming_normal_(input_layer.weight, mode='fan_out', nonlinearity='relu')

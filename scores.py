@@ -33,3 +33,19 @@ def evaluate(net, data_loader, criterion, device, topk=(1,)):
     top5_acc = correct_top5_cnt.mul_(100.0 / total_count)
 
   return avg_loss, top1_acc.item(), top5_acc.item()
+  
+def compute_regularization_loss(net, weight_decay):
+  """ Compute the weight decay term for net, with scaling coefficient weight_decay
+  
+      The L2 regularization is computed according to the weight decay formulation
+      in torch.optim.SGD:
+      
+      https://github.com/pytorch/pytorch/blob/a3410f7994338279b12054756585cfe52689de4d/torch/optim/sgd.py#L93
+  """
+  l2_reg = 0
+  for name, W in net.named_parameters():
+    if 'weight' in name:
+      l2_reg += W.norm(2)
+  l2_reg *= weight_decay
+  return l2_reg
+  

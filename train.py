@@ -32,6 +32,13 @@ def load_optimizer(args, net):
     raise ValueError('Optimizer not supported.')
   return optimizer, scheduler
 
+def override_hyperparams(args, optimizer, scheduler):
+  """For each parameter_group in optimizer, overrides the default parameters
+   with those specified in args.
+  """
+  for group in optimizer.parameter_groups:
+    group['weight_decay'] = args.weight_decay
+
 def get_writer(args, tb_logdir):
   """Get tensorboard summary writer
   """
@@ -168,7 +175,7 @@ def main(args):
   # check for cuda supports
   if use_cuda:
     device = torch.device("cuda:0")
-    cudnn.benchmark = False # disabled to ensure reproducibility
+    cudnn.benchmark = True
   else:
     device = torch.device("cpu")
   
@@ -199,7 +206,8 @@ def main(args):
                                           augmentation=args.augmentation, noise=args.noise, split=args.split,
                                           num_workers=args.workers, split_seed=args.split_seed, noise_seed=args.noise_seed,
                                           stratified=args.stratified, nclasses=args.subsample_classes,
-                                          class_sample_seed=args.class_sample_seed, no_normalization=args.unnormalize)
+                                          class_sample_seed=args.class_sample_seed, no_normalization=args.unnormalize,
+                                          upscale=args.upscale, upscale_padding=args.upscale_padding)
   # define loss
   criterion = nn.CrossEntropyLoss().to(device)
   
@@ -212,11 +220,14 @@ def main(args):
     try:
       net, optimizer, scheduler, start_epoch, best_acc1, best_acc5 = snapshot.load_snapshot(net, optimizer,
                                                                      scheduler, args.resume_from, device)
+      if args.override:
+        override_hyperparams(args, optimizer, scheduler)
     except KeyError:
       classes, in_channels = data_loader.num_classes(args.dataset)
       if args.subsample_classes > 0:
         classes = args.subsample_classes
       net = snapshot.load_model(args.arch, classes, args.resume_from, device, in_channels)
+      
   else:
     # define optimizer
     optimizer, scheduler = load_optimizer(args, net)
@@ -240,6 +251,13 @@ def main(args):
     writer.add_scalar('Loss/train', train_loss, args.epochs)
     writer.add_scalar('Accuracy/train/top1', top1_acc, args.epochs)
     writer.add_scalar('Accuracy/train/top5', top5_acc, args.epochs)
+    writer.close()
+    return
+    
+  if args.eval_regularization_loss:
+    regularization_loss = scores.compute_regularization_loss(net, args.weight_decay)
+    utils.print_regularization_loss_epoch(args.epochs, regularization_loss)
+    writer.add_scalar('Regularization loss', regularization_loss, args.epochs)
     writer.close()
     return
   
@@ -298,6 +316,10 @@ def get_arg_parser():
   parser.add_argument("--noise-seed", type=int, default=None, help="Numpy seed for corrupting labels.")
   # data augmentation
   parser.add_argument("--augmentation", action='store_true', default=False, help="Enable data augmentation.")
+  # upscale image data
+  parser.add_argument("--upscale", action='store_true', default=False, help="Upscale image data to 244x224 pixels.")
+  # upscale padding
+  parser.add_argument("--upscale-padding", action='store_true', default=False, help="Upscale image data to 112x112 pixels, then pad with zeros to get a final resolution of 224x224.")
   # pretrained model from pytorch zoo
   parser.add_argument("--pretrained", action='store_true', default=False, help="Load pretrained architecture on ImageNet from model zoo.")
   # validation split
@@ -312,6 +334,8 @@ def get_arg_parser():
   parser.add_argument("--evaluate", action='store_true', default=False, help="Evaluate model on the validation set.")
   # evalute model on train set
   parser.add_argument("--evaluate-train", action='store_true', default=False, help="Evaluate model on the training set.")
+  # compute regularization loss
+  parser.add_argument("--eval-regularization-loss", action='store_true', default=False, help="Compute the regularization loss and quit The WEIGHT_DECAY option should be set as well.")
   # cuda support
   parser.add_argument("--cuda", action='store_true', default=False, help="Enable GPU support.")
   # number of parallel jobs
@@ -336,6 +360,8 @@ def get_arg_parser():
   parser.add_argument("--weight-decay", type=float, default=1e-4, help="The weight decay coefficient [default = 1e-4].")
   # momentum for sgd
   parser.add_argument("--momentum", type=float, default=0.9, help="The momentum coefficient for SGD [default = 0.9].")
+  # override hyperparameters
+  parser.add_argument("--override", default=False, action="store_true", help="When resuming from a snapshot with different hyperparameters, overrides the values restored from the snapshot with the command line arguments.")
   # path where to store/load models
   parser.add_argument("--models-path", type=str, default='./models', help="The dirname where to store/load models [default = './models'].")
   # pytorch seed

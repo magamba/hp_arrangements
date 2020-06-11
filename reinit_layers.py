@@ -17,6 +17,7 @@ import models
 import snapshot
 import utils
 import scores
+from plot import plot_heatmaps
 
 def reinit_weights(results, net, net_init, test_loader, criterion, epoch, device):
   """For each convolutional layer in net, reinitialize its weights
@@ -110,6 +111,14 @@ def get_arg_parser():
   parser.add_argument("--arch", type=str, default=None, help="Network architecture. Run without this option to see a list of all available pretrained archs.")
   # dataset
   parser.add_argument("--dataset", type=str, default=None, help="Dataset used to train the model. Used to specify the number of classes of the prediction layer of the model.")
+  # upscale image data
+  parser.add_argument("--upscale", action='store_true', default=False, help="Upscale image data to 244x224 pixels.")
+  # upscale and pad image data
+  parser.add_argument("--upscale-padding", action='store_true', default=False, help="Upscale image data to 112x112 pixels and then zero-pad to 224x224.")
+  # subsample classes
+  parser.add_argument("--subsample-classes", type=int, default=0, help="Subsample only SUBSAMPLE_CLASSES classes from DATASET. If set to 0 (default) all classes of DATASET are used.")
+  # subsample seed
+  parser.add_argument("--class-sample-seed", type=int, default=None, help="Numpy random seed used for sampling classes.")
   # load trained model from file
   parser.add_argument("--load-from", type=str, default='', help="Load trained network from file.")
   # measure distance from initialization
@@ -118,6 +127,8 @@ def get_arg_parser():
   parser.add_argument("--cuda", action='store_true', default=False, help="Enable GPU support.")
   # results path
   parser.add_argument("--results", type=str, default='./results', help="Path to store results [default = './results'].")
+  # plots path
+  parser.add_argument("--plots", type=str, default='./plots', help="Path to store plots [default = './plots'].")
   # log file
   parser.add_argument("--log", type=str, default='reinit_weights.log', help="Logfile name [default = 'reinit_weights.log'].")
   # seed
@@ -138,18 +149,28 @@ def get_arg_parser():
 def prepare_dirs(args):
   """Prepare directories to store results
   """
-  results_path = os.path.join(args.results, args.dataset)
+  dataset = args.dataset
+  if args.subsample_classes > 0:
+    dataset = dataset + '_' + str(args.subsample_classes)
+  results_path = os.path.join(args.results, dataset)
   results_path = os.path.join(results_path, args.arch)
   
-  logs_path = os.path.join('./log', args.dataset)
+  plots_path = os.path.join(args.plots, dataset)
+  plots_path = os.path.join(plots_path, args.arch)
+  
+  logs_path = os.path.join('./log', dataset)
   logs_path = os.path.join(logs_path, args.arch)
   
   if args.seed is not None:
     results_path = os.path.join(results_path, str(args.seed))
+    plots_path = os.path.join(plots_path, str(args.seed))
     logs_path = os.path.join(logs_path, str(args.seed))
   
   if not os.path.exists(results_path):
     os.makedirs(results_path)
+    
+  if not os.path.exists(plots_path):
+    os.makedirs(plots_path)
   
   if not os.path.exists(logs_path):
     os.makedirs(logs_path)
@@ -158,7 +179,7 @@ def prepare_dirs(args):
     
   logger = init_logger('reinit_weights', logfile)
   
-  return results_path
+  return results_path, plots_path
 
 def init_logger(logger_name, logfile):
   """Init logger and sets logging options
@@ -199,16 +220,18 @@ def main(args):
   if args.seed is not None:
     torch.manual_seed(args.seed)
     
-  results_path = prepare_dirs(args)
+  results_path, plots_path = prepare_dirs(args)
   logger = logging.getLogger('reinit_weights')
     
   if torch.cuda.is_available() and args.cuda:
     device = torch.device("cuda:0")
-    cudnn.benchmark = False # disabled to ensure reproducibility
+    cudnn.benchmark = True
   else:
     device = torch.device("cpu")
   
   classes, in_channels = data_loader.num_classes(args.dataset)
+  if args.subsample_classes > 0:
+    classes = args.subsample_classes
  
   if os.path.exists(args.load_from):
     logger.info("Loading {} from {}.".format(args.arch, args.load_from))
@@ -221,8 +244,9 @@ def main(args):
   criterion = nn.CrossEntropyLoss().to(device)
   
   # load test set
-  _, test_loader, _ = data_loader.load_dataset(args.dataset, args.data_path, args.batch_size, shuffle=False,
-                                  augmentation=False, num_workers=args.workers)
+  _, test_loader, _ = data_loader.load_dataset(args.dataset, args.data_path, args.batch_size, shuffle=True,
+                                  augmentation=False, num_workers=args.workers, nclasses=args.subsample_classes,
+                                  class_sample_seed=args.class_sample_seed, upscale=args.upscale, upscale_padding=args.upscale_padding)
   # evaluate model
   logger.info("Evaluating trained model on test set.")
   test_loss, top1_acc, top5_acc = scores.evaluate(net, test_loader, criterion, device, topk=(1,5))
@@ -264,6 +288,10 @@ def main(args):
   # save results to json
   logger.info("Saving results to file.")
   snapshot.save_results(results, filename, results_path)
+  
+  # plot results
+  logger.info("Plotting results.")
+  plot_heatmaps(results, filename, plots_path)
   
 if __name__ == "__main__":
   args = get_arg_parser()
