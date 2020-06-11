@@ -204,7 +204,7 @@ Finally, when no model snapshots or ```--pretrained``` are specified, the statis
     python compute_projections.py --arch alexnet --dataset imagenet --cuda --normalize
   ```
   
-For each snapshot or pretrained model, the compute statistics will be stored as a JSON file, which can later be loaded for plotting.
+For each snapshot or pretrained model, the computed statistics will be stored as a JSON file, which can later be loaded for plotting.
 
 ### Example
 Compute projection statistics from a model snasphot of AlexNet trained on Imagenet:
