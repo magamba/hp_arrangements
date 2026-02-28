@@ -2,6 +2,16 @@
 
 This repository contains the source code to reproduce the experiments of the paper "Hyperplane Arrangements of Trained ConvNets Are Biased". The code is based on Pytorch.
 
+If you use this code or draw inspiration from it, please cite the following refernece:
+```bibtex
+@article{gamba2020hyperplane,
+  title={Hyperplane arrangements of trained convnets are biased},
+  author={Gamba, Matteo and Carlsson, Stefan and Azizpour, Hossein and Bj{\"o}rkman, M{\aa}rten},
+  journal={arXiv preprint arXiv:2003.07797},
+  year={2020}
+}
+```
+
 ## Requirements
 
 To install the dependencies for the project, run
